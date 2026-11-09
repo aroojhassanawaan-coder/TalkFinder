@@ -13,13 +13,10 @@ st.set_page_config(
 # --- CUSTOM BEAUTIFUL CSS INJECTION ---
 st.markdown("""
 <style>
-    /* Global Styling & Theme Adjustments */
     .main {
         background-color: #0f172a;
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }
-    
-    /* Custom Header Banner */
     .header-banner {
         background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
         border: 1px solid #334155;
@@ -40,8 +37,6 @@ st.markdown("""
         font-size: 1.05rem;
         margin-top: 6px;
     }
-    
-    /* Metric & Badge Cards */
     .badge-container {
         display: flex;
         gap: 12px;
@@ -59,8 +54,6 @@ st.markdown("""
         align-items: center;
         gap: 6px;
     }
-
-    /* Talk Cards Styling */
     .talk-card {
         background-color: #1e293b;
         border: 1px solid #334155;
@@ -99,11 +92,6 @@ st.markdown("""
         font-weight: 600;
         text-transform: uppercase;
         margin-left: 8px;
-    }
-
-    /* Sidebar Clean styling */
-    .css-1d3b13b {
-        background-color: #0f172a;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -158,7 +146,6 @@ with st.sidebar:
         st.write("2. Query Elasticsearch index across multi-field text vectors.")
         st.write("3. Provide actionable session recommendations and schedule exports.")
 
-# MCP Context Resource
 @st.cache_data
 def get_mcp_resources(role):
     return {
@@ -174,4 +161,175 @@ mcp_context = get_mcp_resources(user_role)
 
 # --- 2. MULTI-DOMAIN DATASET ---
 data = {
-    "ID": [1, 2, 3, 4, 5, 6, 7, 8, 9, 1
+    "ID": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    "Title": [
+        "AI Product Management: From Concept to Production",
+        "Ethics, Bias, and Responsible AI in Product Design",
+        "Data-Driven Decision Making using Cloud Analytics",
+        "Building Scalable Search & RAG Architectures with Elasticsearch",
+        "Advanced LLM Fine-Tuning and Prompt Engineering Patterns",
+        "Cybersecurity Threat Intelligence Automation in Fintech",
+        "DevOps & CI/CD Telemetry for High-Scale Cloud Systems",
+        "UX Design Systems for Complex Enterprise Applications",
+        "Genomics Data Pipelines and Healthcare Analytics at Scale",
+        "Modern Roadmapping & Cross-Functional Engineering Alignment"
+    ],
+    "Speaker": [
+        "Alice Smith (Head of Product)", 
+        "Bob Jones (AI Ethics Lead)", 
+        "Charlie Brown (Analytics Director)", 
+        "Diana Prince (Principal Engineer)", 
+        "Dr. Marcus Vance (AI Research Scientist)",
+        "Fiona Gallagher (Cybersecurity Lead)",
+        "George Clark (DevOps Architect)",
+        "Elena Rostova (Lead UX Strategist)",
+        "Dr. Samuel King (Bioinformatics VP)",
+        "Evan Wright (VP of Engineering & Product)"
+    ],
+    "Time": ["9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM", "4:45 PM", "5:30 PM"],
+    "Domain": ["Product & Strategy", "AI & Ethics", "Data Science", "Data Engineering", "AI & Machine Learning", "Cybersecurity", "DevOps & Cloud", "UX Design", "Healthcare Tech", "Engineering Leadership"],
+    "Description": [
+        "Learn how product managers define specs, manage risk, and evaluate metrics when launching LLM features.",
+        "Navigating algorithmic bias, user transparency, and ethical frameworks when designing user-facing AI products.",
+        "How teams leverage real-time cloud data pipelines and telemetry to guide experimentation and prioritization.",
+        "A practical look at how vector search and hybrid retrieval power modern search engines and RAG applications.",
+        "Deep dive into parameter-efficient fine-tuning (LoRA), quantization, and prompt optimization techniques.",
+        "Exploring automated threat detection, secure payment protocols, and fraud mitigation in digital finance.",
+        "Automating cloud infrastructure, container security orchestration, and production monitoring metrics.",
+        "Creating cohesive, accessible design systems that scale across multi-platform enterprise products.",
+        "Processing massive genomic datasets securely while maintaining HIPAA compliance and clinical accuracy.",
+        "Strategic techniques for aligning stakeholders, engineering velocity, and agile product backlogs."
+    ]
+}
+df = pd.DataFrame(data)
+
+# Initialize Session State
+if "bookmarks" not in st.session_state:
+    st.session_state.bookmarks = []
+if "messages" not in st.session_state:
+    st.session_state.messages = [
+        {"role": "assistant", "content": f"👋 Hello! I am your **TalkFinder AI Assistant**. As a **{user_role}**, what specific topics or sessions can I help you find today?"}
+    ]
+
+# --- 3. MAIN APP TABS ---
+tab1, tab2, tab3 = st.tabs(["💬 AI Assistant (MCP + RAG)", "🔍 Elasticsearch Explorer", "⭐ Saved Schedule"])
+
+# TAB 1: LLM CHATBOT
+with tab1:
+    st.caption(f"Currently advising: **{user_role}**")
+    
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    if prompt := st.chat_input("Ask for talk recommendations, session strategies, or topic insights..."):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        relevant_talks = []
+        query_terms = prompt.lower().split()
+        for _, row in df.iterrows():
+            blob = f"{row['Title']} {row['Speaker']} {row['Domain']} {row['Description']}".lower()
+            if any(term in blob for term in query_terms):
+                relevant_talks.append(f"- **{row['Title']}** ({row['Time']}) by {row['Speaker']} [Domain: {row['Domain']}]: {row['Description']}")
+
+        context_talks_str = "\n".join(relevant_talks) if relevant_talks else "No direct talk matches found."
+        mcp_protocols_str = "\n".join(mcp_context["protocols"])
+
+        with st.chat_message("assistant"):
+            if not openai_api_key:
+                response_content = (
+                    f"⚠️ **OpenAI API Key Not Found**\n\n"
+                    f"Please enter your OpenAI API key in the left sidebar to activate live conversational responses.\n\n"
+                    f"**Elasticsearch Retrieved Sessions (Demo Match for {user_role}):**\n\n{context_talks_str}"
+                )
+                st.markdown(response_content)
+            else:
+                try:
+                    from openai import OpenAI
+                    client = OpenAI(api_key=openai_api_key)
+                    
+                    system_prompt = f"""
+                    You are TalkFinder's expert Cross-Domain AI Conference Concierge.
+                    User Professional Persona: {user_role}
+                    Persona Guideline: {mcp_context['persona_guidelines']}
+                    
+                    Model Context Protocol (MCP) Rules:
+                    {mcp_protocols_str}
+                    
+                    Elasticsearch Index Search Results:
+                    {context_talks_str}
+                    
+                    Instructions:
+                    - Recommend specific sessions from the Elasticsearch search results that best match the user's professional persona and learning goals.
+                    - Explain WHY each talk is valuable for their specific field and role.
+                    - Maintain a supportive, professional, articulate, and insightful tone.
+                    """
+
+                    completion = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": prompt}
+                        ]
+                    )
+                    response_content = completion.choices[0].message.content
+                    st.markdown(response_content)
+                except Exception as e:
+                    response_content = f"❌ Error generating response: {e}"
+                    st.error(response_content)
+
+        st.session_state.messages.append({"role": "assistant", "content": response_content})
+
+# TAB 2: ELASTICSEARCH SESSION EXPLORER
+with tab2:
+    st.subheader("Multi-Field Session Explorer")
+    user_query = st.text_input("🔍 Search sessions by keyword, speaker, domain, or time:", placeholder="e.g., Diana Prince, RAG, Cybersecurity, 10:00 AM...")
+    
+    filtered_df = df.copy()
+    if user_query:
+        scores = []
+        for _, row in filtered_df.iterrows():
+            blob = f"{row['Title']} {row['Speaker']} {row['Time']} {row['Domain']} {row['Description']}".lower()
+            score = sum(1 for term in user_query.lower().split() if term in blob)
+            scores.append(score)
+        filtered_df["score"] = scores
+        filtered_df = filtered_df[filtered_df["score"] > 0].sort_values(by="score", ascending=False)
+
+    if filtered_df.empty:
+        st.info("No talks match your query. Try keywords like 'AI', 'Security', 'Cloud', or 'Design'.")
+    else:
+        for _, row in filtered_df.iterrows():
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.markdown(f"""
+                <div class="talk-card">
+                    <div class="talk-title">{row['Title']}</div>
+                    <div class="talk-meta">👤 {row['Speaker']} | ⏰ {row['Time']} <span class="domain-tag">{row['Domain']}</span></div>
+                    <div class="talk-desc">{row['Description']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with col2:
+                st.write("")
+                is_saved = row['ID'] in [b['ID'] for b in st.session_state.bookmarks]
+                if is_saved:
+                    if st.button("Remove ❌", key=f"r_{row['ID']}"):
+                        st.session_state.bookmarks = [b for b in st.session_state.bookmarks if b['ID'] != row['ID']]
+                        st.rerun()
+                else:
+                    if st.button("Add to Schedule ➕", key=f"a_{row['ID']}"):
+                        st.session_state.bookmarks.append(row.to_dict())
+                        st.rerun()
+
+# TAB 3: SAVED SCHEDULE
+with tab3:
+    st.subheader("⭐ Custom Conference Itinerary")
+    if not st.session_state.bookmarks:
+        st.info("Your schedule is currently empty. Add sessions from the Explorer tab or ask the AI Assistant!")
+    else:
+        schedule_df = pd.DataFrame(st.session_state.bookmarks)
+        st.dataframe(schedule_df[["Time", "Title", "Speaker", "Domain", "Description"]], use_container_width=True, hide_index=True)
+        
+        csv_bytes = schedule_df[["Time", "Title", "Speaker", "Domain", "Description"]].to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Download Custom Schedule (CSV)", data=csv_bytes, file_name="my_conference_schedule.csv", mime="text/csv")
