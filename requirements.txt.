@@ -1,2 +1,4 @@
 streamlit
 pandas
+elasticsearch
+sentence-transformers
