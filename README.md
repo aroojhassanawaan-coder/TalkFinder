@@ -11,3 +11,13 @@ An AI-powered conference companion that builds a personalized talk schedule base
    ```bash
    git clone [https://github.com/aroojhassanawaan-coder/TalkFinder.git](https://github.com/aroojhassanawaan-coder/TalkFinder.git)
    cd TalkFinder
+
+Install dependencies:
+
+Bash
+pip install -r requirements.txt
+
+Run the application:
+
+Bash
+streamlit run app.py
