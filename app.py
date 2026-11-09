@@ -144,7 +144,7 @@ with st.sidebar:
         st.caption("Context rules enforced by MCP Server:")
         st.write("1. Prioritize domain-specific technical & strategic alignment.")
         st.write("2. Query Elasticsearch index across multi-field text vectors.")
-        st.write("3. Provide actionable session recommendations and schedule exports.")
+        st.write("3. Link user bookmarks to AI Assistant for personal itinerary analysis.")
 
 @st.cache_data
 def get_mcp_resources(role):
@@ -152,7 +152,7 @@ def get_mcp_resources(role):
         "protocols": [
             "Rule 1: Prioritize sessions matching the selected professional domain and technical depth.",
             "Rule 2: Use Elasticsearch multi-field semantic topic matching for precise recommendations.",
-            "Rule 3: Attendees can bookmark sessions and export a clean CSV custom itinerary."
+            "Rule 3: Integrate user's saved schedule bookmarks directly into the AI Assistant context."
         ],
         "persona_guidelines": f"Tailor all schedule recommendations specifically for a {role}. Highlight domain-specific frameworks, technical trade-offs, and actionable career insights."
     }
@@ -208,25 +208,33 @@ if "bookmarks" not in st.session_state:
     st.session_state.bookmarks = []
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": f"👋 Hello! I am your **TalkFinder AI Assistant**. As a **{user_role}**, what specific topics or sessions can I help you find today?"}
+        {"role": "assistant", "content": f"👋 Hello! I am your **TalkFinder AI Assistant**. As a **{user_role}**, I can see your saved schedule bookmarks and recommend talks. What can I help you with today?"}
     ]
 
 # --- 3. MAIN APP TABS ---
-tab1, tab2, tab3 = st.tabs(["💬 AI Assistant (MCP + RAG)", "🔍 Elasticsearch Explorer", "⭐ Saved Schedule"])
+tab1, tab2, tab3 = st.tabs(["💬 AI Assistant (MCP + Saved Schedule)", "🔍 Elasticsearch Explorer", "⭐ Saved Schedule"])
 
-# TAB 1: LLM CHATBOT
+# TAB 1: LLM CHATBOT (Linked with Bookmarks & Elasticsearch RAG)
 with tab1:
-    st.caption(f"Currently advising: **{user_role}**")
+    st.caption(f"Currently advising: **{user_role}** | Saved Bookmarks in Memory: **{len(st.session_state.bookmarks)} talks**")
     
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    if prompt := st.chat_input("Ask for talk recommendations, session strategies, or topic insights..."):
+    if prompt := st.chat_input("Ask about your saved schedule, get talk recommendations, or session strategies..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
+        # 1. Retrieve saved schedule bookmarks context
+        saved_schedule_list = []
+        if st.session_state.bookmarks:
+            for b in st.session_state.bookmarks:
+                saved_schedule_list.append(f"- **{b['Title']}** at {b['Time']} by {b['Speaker']} [{b['Domain']}]")
+        saved_schedule_str = "\n".join(saved_schedule_list) if saved_schedule_list else "No talks bookmarked yet."
+
+        # 2. Retrieve relevant Elasticsearch talk matches based on query
         relevant_talks = []
         query_terms = prompt.lower().split()
         for _, row in df.iterrows():
@@ -234,102 +242,4 @@ with tab1:
             if any(term in blob for term in query_terms):
                 relevant_talks.append(f"- **{row['Title']}** ({row['Time']}) by {row['Speaker']} [Domain: {row['Domain']}]: {row['Description']}")
 
-        context_talks_str = "\n".join(relevant_talks) if relevant_talks else "No direct talk matches found."
-        mcp_protocols_str = "\n".join(mcp_context["protocols"])
-
-        with st.chat_message("assistant"):
-            if not openai_api_key:
-                response_content = (
-                    f"⚠️ **OpenAI API Key Not Found**\n\n"
-                    f"Please enter your OpenAI API key in the left sidebar to activate live conversational responses.\n\n"
-                    f"**Elasticsearch Retrieved Sessions (Demo Match for {user_role}):**\n\n{context_talks_str}"
-                )
-                st.markdown(response_content)
-            else:
-                try:
-                    from openai import OpenAI
-                    client = OpenAI(api_key=openai_api_key)
-                    
-                    system_prompt = f"""
-                    You are TalkFinder's expert Cross-Domain AI Conference Concierge.
-                    User Professional Persona: {user_role}
-                    Persona Guideline: {mcp_context['persona_guidelines']}
-                    
-                    Model Context Protocol (MCP) Rules:
-                    {mcp_protocols_str}
-                    
-                    Elasticsearch Index Search Results:
-                    {context_talks_str}
-                    
-                    Instructions:
-                    - Recommend specific sessions from the Elasticsearch search results that best match the user's professional persona and learning goals.
-                    - Explain WHY each talk is valuable for their specific field and role.
-                    - Maintain a supportive, professional, articulate, and insightful tone.
-                    """
-
-                    completion = client.chat.completions.create(
-                        model="gpt-4o-mini",
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": prompt}
-                        ]
-                    )
-                    response_content = completion.choices[0].message.content
-                    st.markdown(response_content)
-                except Exception as e:
-                    response_content = f"❌ Error generating response: {e}"
-                    st.error(response_content)
-
-        st.session_state.messages.append({"role": "assistant", "content": response_content})
-
-# TAB 2: ELASTICSEARCH SESSION EXPLORER
-with tab2:
-    st.subheader("Multi-Field Session Explorer")
-    user_query = st.text_input("🔍 Search sessions by keyword, speaker, domain, or time:", placeholder="e.g., Diana Prince, RAG, Cybersecurity, 10:00 AM...")
-    
-    filtered_df = df.copy()
-    if user_query:
-        scores = []
-        for _, row in filtered_df.iterrows():
-            blob = f"{row['Title']} {row['Speaker']} {row['Time']} {row['Domain']} {row['Description']}".lower()
-            score = sum(1 for term in user_query.lower().split() if term in blob)
-            scores.append(score)
-        filtered_df["score"] = scores
-        filtered_df = filtered_df[filtered_df["score"] > 0].sort_values(by="score", ascending=False)
-
-    if filtered_df.empty:
-        st.info("No talks match your query. Try keywords like 'AI', 'Security', 'Cloud', or 'Design'.")
-    else:
-        for _, row in filtered_df.iterrows():
-            col1, col2 = st.columns([4, 1])
-            with col1:
-                st.markdown(f"""
-                <div class="talk-card">
-                    <div class="talk-title">{row['Title']}</div>
-                    <div class="talk-meta">👤 {row['Speaker']} | ⏰ {row['Time']} <span class="domain-tag">{row['Domain']}</span></div>
-                    <div class="talk-desc">{row['Description']}</div>
-                </div>
-                """, unsafe_allow_html=True)
-            with col2:
-                st.write("")
-                is_saved = row['ID'] in [b['ID'] for b in st.session_state.bookmarks]
-                if is_saved:
-                    if st.button("Remove ❌", key=f"r_{row['ID']}"):
-                        st.session_state.bookmarks = [b for b in st.session_state.bookmarks if b['ID'] != row['ID']]
-                        st.rerun()
-                else:
-                    if st.button("Add to Schedule ➕", key=f"a_{row['ID']}"):
-                        st.session_state.bookmarks.append(row.to_dict())
-                        st.rerun()
-
-# TAB 3: SAVED SCHEDULE
-with tab3:
-    st.subheader("⭐ Custom Conference Itinerary")
-    if not st.session_state.bookmarks:
-        st.info("Your schedule is currently empty. Add sessions from the Explorer tab or ask the AI Assistant!")
-    else:
-        schedule_df = pd.DataFrame(st.session_state.bookmarks)
-        st.dataframe(schedule_df[["Time", "Title", "Speaker", "Domain", "Description"]], use_container_width=True, hide_index=True)
-        
-        csv_bytes = schedule_df[["Time", "Title", "Speaker", "Domain", "Description"]].to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Download Custom Schedule (CSV)", data=csv_bytes, file_name="my_conference_schedule.csv", mime="text/csv")
+        context_talks_str = "\n".join(relevant_talks) if relevant_talks
