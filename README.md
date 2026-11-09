@@ -30,3 +30,12 @@ Data Processing: Pandas
 Search & Recommendation Engine: Elasticsearch Vector Search / Python
 
 AI Assistance Disclosure: Built using AI-assisted pair programming for learning and development.
+
+
+Sidebar (st.sidebar.multiselect): Adds filter controls on the left side of the screen so attendees can isolate specific speakers or timeslots.
+
+Session State (st.session_state): Stores bookmarked talks in memory while the user interacts with the web app without losing their selections on screen refreshes.
+
+Tabs (st.tabs): Separates browsing available talks from viewing the personal itinerary into distinct tabs for a clean UI.
+
+Download Button (st.download_button): Converts the bookmarked dataframe into a UTF-8 encoded CSV file downloadable directly to the attendee's computer.
