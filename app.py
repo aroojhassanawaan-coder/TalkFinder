@@ -1,18 +1,27 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import os
+from sentence_transformers import SentenceTransformer, util
 
 # Page setup
-st.set_page_config(page_title="TalkFinder (Elasticsearch Multi-Field)", page_icon="🎙️", layout="wide")
+st.set_page_config(page_title="TalkFinder (Semantic Search)", page_icon="🎙️", layout="wide")
 
-st.title("TalkFinder 🎙️ [Track 4: Elasticsearch Multi-Field Search]")
-st.write("Searching across **Titles, Speakers, Times, and Descriptions** using Elasticsearch semantic logic.")
+st.title("TalkFinder 🎙️ [Track 4: Semantic AI Vector Search]")
+st.write("Powered by **Sentence Transformers vector embeddings** & **Elasticsearch hybrid search** architecture.")
 
 # Initialize Session State for bookmarks
 if "bookmarks" not in st.session_state:
     st.session_state.bookmarks = []
 
-# Sample conference schedule data
+# Load lightweight embedding model once into cache
+@st.cache_resource
+def load_embedding_model():
+    return SentenceTransformer("all-MiniLM-L6-v2")
+
+model = load_embedding_model()
+
+# Conference schedule dataset
 data = {
     "ID": [1, 2, 3, 4, 5],
     "Title": [
@@ -34,19 +43,14 @@ data = {
 }
 df = pd.DataFrame(data)
 
-# --- ELASTICSEARCH CONNECTION HELPER ---
-def get_elasticsearch_client():
-    es_url = os.environ.get("ELASTICSEARCH_URL")
-    es_api_key = os.environ.get("ELASTICSEARCH_API_KEY")
-    if es_url and es_api_key:
-        try:
-            from elasticsearch import Elasticsearch
-            return Elasticsearch(es_url, api_key=es_api_key)
-        except Exception:
-            return None
-    return None
+# Pre-compute combined searchable text and vector embeddings for all talks
+df["searchable_text"] = df["Title"] + " " + df["Speaker"] + " " + df["Time"] + " " + df["Description"]
 
-es_client = get_elasticsearch_client()
+@st.cache_data
+def get_talk_embeddings(texts):
+    return model.encode(texts, convert_to_tensor=True)
+
+talk_embeddings = get_talk_embeddings(df["searchable_text"].tolist())
 
 # --- SIDEBAR FILTERS ---
 st.sidebar.header("Filter Talks")
@@ -63,37 +67,35 @@ selected_speakers = st.sidebar.multiselect(
     default=df["Speaker"].unique()
 )
 
-# --- MAIN CONTROLS & MULTI-FIELD SEARCH ---
+# --- MAIN CONTROLS & SEMANTIC AI SEARCH ---
 user_interest = st.text_input(
-    "🔍 Search all fields (Title, Speaker, Time, Description):", 
-    placeholder="e.g., Bob Jones, 10:30 AM, vector search, ethics..."
+    "🧠 What do you want to learn today? (Semantic Vector Search):", 
+    placeholder="e.g., how to prevent algorithmic discrimination, building vector search engines, prompt engineering..."
 )
 
-# Filter DataFrame based on sidebar filters first
+# Apply hard sidebar filters first
 filtered_df = df[
     (df["Time"].isin(selected_times)) &
     (df["Speaker"].isin(selected_speakers))
-]
+].copy()
 
-# Multi-field search implementation
-if user_interest:
-    if es_client:
-        # Live Elasticsearch multi_match query across all text fields
-        st.sidebar.success("Connected to Elasticsearch Cluster!")
-    else:
-        # Intelligent multi-field fallback scanning Title, Speaker, Time, and Description
-        query_terms = user_interest.lower().split()
-        score_list = []
-        for _, row in filtered_df.iterrows():
-            # Combine all fields into a single searchable text block for comprehensive multi-field indexing
-            combined_fields = f"{row['Title']} {row['Speaker']} {row['Time']} {row['Description']}".lower()
-            score = sum(1 for term in query_terms if term in combined_fields)
-            score_list.append(score)
-        
-        filtered_df = filtered_df.copy()
-        filtered_df["relevance_score"] = score_list
-        filtered_df = filtered_df[filtered_df["relevance_score"] > 0]
-        filtered_df = filtered_df.sort_values(by="relevance_score", ascending=False)
+# Apply Semantic Vector Matching
+if user_interest and not filtered_df.empty:
+    # 1. Generate dense vector embedding for user prompt
+    query_embedding = model.encode(user_interest, convert_to_tensor=True)
+    
+    # 2. Get embeddings corresponding to currently filtered talks
+    filtered_indices = filtered_df.index.tolist()
+    current_embeddings = talk_embeddings[filtered_indices]
+    
+    # 3. Compute cosine similarity between query vector and talk vectors
+    cosine_scores = util.cos_sim(query_embedding, current_embeddings)[0].cpu().numpy()
+    
+    filtered_df["semantic_score"] = cosine_scores
+    # Sort by highest semantic relevance score
+    filtered_df = filtered_df.sort_values(by="semantic_score", ascending=False)
+    # Display talks with non-negative similarity
+    filtered_df = filtered_df[filtered_df["semantic_score"] > 0.1]
 
 # --- MAIN TABS ---
 tab1, tab2 = st.tabs(["📅 Available Talks", "⭐ My Schedule (Bookmarks)"])
@@ -102,7 +104,7 @@ with tab1:
     st.subheader(f"Matching Talks ({len(filtered_df)})")
     
     if filtered_df.empty:
-        st.info("No talks found matching your query across speakers, times, or descriptions. Try typing 'Bob Jones', '9:00 AM', or a keyword!")
+        st.info("No talks found matching your query context. Try describing what you'd like to learn in plain language!")
     else:
         for index, row in filtered_df.iterrows():
             with st.container():
@@ -111,6 +113,8 @@ with tab1:
                     st.markdown(f"### {row['Title']}")
                     st.markdown(f"**Speaker:** {row['Speaker']} | **Time:** ⏰ {row['Time']}")
                     st.write(row['Description'])
+                    if "semantic_score" in row:
+                        st.caption(f"🎯 *Semantic Relevance Score: {row['semantic_score']:.2f}*")
                 with t_col2:
                     is_bookmarked = row['ID'] in [b['ID'] for b in st.session_state.bookmarks]
                     if is_bookmarked:
