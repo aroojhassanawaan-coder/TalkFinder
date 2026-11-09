@@ -39,3 +39,8 @@ Session State (st.session_state): Stores bookmarked talks in memory while the us
 Tabs (st.tabs): Separates browsing available talks from viewing the personal itinerary into distinct tabs for a clean UI.
 
 Download Button (st.download_button): Converts the bookmarked dataframe into a UTF-8 encoded CSV file downloadable directly to the attendee's computer.
+
+
+## 🔍 Track 4: Elasticsearch Integration
+
+TalkFinder integrates **Elasticsearch vector search and semantic retrieval architectures**. Instead of rigid exact keyword matching, the app maps user learning intentions against conference session descriptions using dense vector embeddings and relevance scoring, mirroring production RAG workflows.
