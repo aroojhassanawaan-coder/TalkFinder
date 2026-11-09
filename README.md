@@ -21,3 +21,12 @@ Run the application:
 
 Bash
 streamlit run app.py
+
+Tech Stack & Tools
+Frontend/UI: Streamlit
+
+Data Processing: Pandas
+
+Search & Recommendation Engine: Elasticsearch Vector Search / Python
+
+AI Assistance Disclosure: Built using AI-assisted pair programming for learning and development.
