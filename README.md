@@ -44,3 +44,5 @@ Download Button (st.download_button): Converts the bookmarked dataframe into a U
 ## 🔍 Track 4: Elasticsearch Integration
 
 TalkFinder integrates **Elasticsearch vector search and semantic retrieval architectures**. Instead of rigid exact keyword matching, the app maps user learning intentions against conference session descriptions using dense vector embeddings and relevance scoring, mirroring production RAG workflows.
+
+Add multi-field Elasticsearch query support for speakers, times, and descriptions
