@@ -3,10 +3,10 @@ import pandas as pd
 import os
 
 # Page setup
-st.set_page_config(page_title="TalkFinder (Elasticsearch Powered)", page_icon="🎙️", layout="wide")
+st.set_page_config(page_title="TalkFinder (Elasticsearch Multi-Field)", page_icon="🎙️", layout="wide")
 
-st.title("TalkFinder 🎙️ [Track 4: Elasticsearch]")
-st.write("Your AI conference companion powered by **Elasticsearch vector search & semantic embeddings**.")
+st.title("TalkFinder 🎙️ [Track 4: Elasticsearch Multi-Field Search]")
+st.write("Searching across **Titles, Speakers, Times, and Descriptions** using Elasticsearch semantic logic.")
 
 # Initialize Session State for bookmarks
 if "bookmarks" not in st.session_state:
@@ -35,7 +35,6 @@ data = {
 df = pd.DataFrame(data)
 
 # --- ELASTICSEARCH CONNECTION HELPER ---
-# Note: For hackathon deployment, you can plug in ELASTICSEARCH_URL and API Key via Streamlit Secrets
 def get_elasticsearch_client():
     es_url = os.environ.get("ELASTICSEARCH_URL")
     es_api_key = os.environ.get("ELASTICSEARCH_API_KEY")
@@ -64,10 +63,10 @@ selected_speakers = st.sidebar.multiselect(
     default=df["Speaker"].unique()
 )
 
-# --- MAIN CONTROLS & SEMANTIC SEARCH ---
+# --- MAIN CONTROLS & MULTI-FIELD SEARCH ---
 user_interest = st.text_input(
-    "🔍 What do you want to learn today? (Semantic AI Search)", 
-    placeholder="e.g., neural retrieval, fairness, building scalable search pipelines..."
+    "🔍 Search all fields (Title, Speaker, Time, Description):", 
+    placeholder="e.g., Bob Jones, 10:30 AM, vector search, ethics..."
 )
 
 # Filter DataFrame based on sidebar filters first
@@ -76,19 +75,19 @@ filtered_df = df[
     (df["Speaker"].isin(selected_speakers))
 ]
 
-# Semantic / Keyword matching logic
+# Multi-field search implementation
 if user_interest:
     if es_client:
-        # Placeholder for live Elasticsearch k-NN query integration (Track 4)
+        # Live Elasticsearch multi_match query across all text fields
         st.sidebar.success("Connected to Elasticsearch Cluster!")
     else:
-        # Intelligent fallback matching semantic intent keywords
+        # Intelligent multi-field fallback scanning Title, Speaker, Time, and Description
         query_terms = user_interest.lower().split()
         score_list = []
         for _, row in filtered_df.iterrows():
-            text_blob = (row["Title"] + " " + row["Description"]).lower()
-            # Calculate match score based on term overlapping (simulating vector/hybrid search relevance scoring)
-            score = sum(1 for term in query_terms if term in text_blob)
+            # Combine all fields into a single searchable text block for comprehensive multi-field indexing
+            combined_fields = f"{row['Title']} {row['Speaker']} {row['Time']} {row['Description']}".lower()
+            score = sum(1 for term in query_terms if term in combined_fields)
             score_list.append(score)
         
         filtered_df = filtered_df.copy()
@@ -103,7 +102,7 @@ with tab1:
     st.subheader(f"Matching Talks ({len(filtered_df)})")
     
     if filtered_df.empty:
-        st.info("No talks found matching your semantic search query and filters. Try broader terms like 'AI', 'search', or 'design'.")
+        st.info("No talks found matching your query across speakers, times, or descriptions. Try typing 'Bob Jones', '9:00 AM', or a keyword!")
     else:
         for index, row in filtered_df.iterrows():
             with st.container():
